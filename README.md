@@ -31,7 +31,7 @@ The initialized app uses Next.js, so `NEXT_PUBLIC_` replaces the original plan's
 - Country code defaults to 91; phone inputs strip non-digits and are validated before saving.
 - Successful inserts clear the form and refresh the pending count. Failed saves retain the draft.
 - Queue lists pending messages newest first and listens to all table changes, with focus/online refresh and a 30-second polling fallback.
-- Review & open WhatsApp first fetches the latest row and shows it for confirmation. The sender then activates a direct encoded `wa.me` link, and that handoff moves the row to history. A database failure displays a warning.
+- Open WhatsApp fetches the latest row, copies the text, opens a direct encoded `wa.me` link, and moves the row to history. A database failure displays a warning.
 - **Sent means handed off to WhatsApp, not delivered.** The user must press Send in WhatsApp. Closing the WhatsApp tab does not restore the queue entry. Two simultaneous operators can open the same message; this app is designed for one sender.
 - Local storage is used only when credentials are absent. Configured database failures never silently switch storage modes. Shared mode requires a connection; offline writes are not queued.
 

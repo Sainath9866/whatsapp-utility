@@ -1,6 +1,15 @@
-import { test, expect } from "@playwright/test";
+import { test, expect, type Page } from "@playwright/test";
 
 const message = "  *Hello Priya* 👋\n\n- First item\n- Second item\n\n_See you soon_ & + # 100%\n  ";
+
+async function captureOpenUrl(page: Page) {
+  await page.evaluate(() => {
+    window.open = (url?: string | URL) => {
+      if (typeof url === "string") localStorage.setItem("captured-open-url", url);
+      return null;
+    };
+  });
+}
 
 test.beforeEach(async ({ page }) => {
   await page.addInitScript(() => {
@@ -57,13 +66,11 @@ test('preserves pasted message from editor through storage and WhatsApp URL', as
   expect(saved.message).toBe(message);
   await page.getByRole('button', { name: /Send Queue/ }).click();
   const card = page.getByRole('article').filter({ hasText: 'Paste test recipient' });
-  await card.getByRole('button', { name: 'Review & open WhatsApp' }).click();
-  const openLink = page.getByRole('link', { name: 'Open WhatsApp' });
-  const url = await openLink.getAttribute('href');
-  await openLink.evaluate((element) => element.addEventListener('click', (event) => event.preventDefault()));
-  await openLink.click();
+  await captureOpenUrl(page);
+  await card.getByRole('button', { name: 'Open WhatsApp', exact: true }).click();
+  const url = await page.evaluate(() => localStorage.getItem('captured-open-url')!);
   await expect(card).toHaveCount(0);
-  expect(new URL(url!).searchParams.get('text')).toBe(message);
+  expect(new URL(url).searchParams.get('text')).toBe(message);
   await page.getByRole('button', { name: 'History', exact: true }).click();
   const historyCard = page.getByRole('article').filter({ hasText: 'Paste test recipient' });
   await historyCard.getByRole('button', { name: 'Move back to queue' }).click();
@@ -94,10 +101,8 @@ test('submitting the same number twice creates two independently actionable mess
   const queue = page.getByRole('region', { name: 'Send queue', exact: true });
   await queue.getByLabel('Search queue').fill('Repeat recipient');
   await expect(queue.getByRole('article')).toHaveCount(2);
-  await queue.getByRole('button', { name: 'Review & open WhatsApp' }).first().click();
-  const openLink = page.getByRole('link', { name: 'Open WhatsApp' });
-  await openLink.evaluate((element) => element.addEventListener('click', (event) => event.preventDefault()));
-  await openLink.click();
+  await captureOpenUrl(page);
+  await queue.getByRole('button', { name: 'Open WhatsApp' }).first().click();
   await expect(queue.getByRole('article')).toHaveCount(1);
 });
 
@@ -115,19 +120,18 @@ test('re-fetches and copies the latest saved text before opening WhatsApp', asyn
       configurable: true,
       value: { writeText: async (text: string) => localStorage.setItem('captured-clipboard', text) },
     });
+    window.open = (url?: string | URL) => {
+      if (typeof url === 'string') localStorage.setItem('captured-open-url', url);
+      return null;
+    };
   });
 
-  await queue.getByRole('button', { name: 'Review & open WhatsApp' }).click();
+  await queue.getByRole('button', { name: 'Open WhatsApp' }).click();
   const expected = 'Fresh text fetched at click time 👋\n\n*Latest version*';
-  const dialog = page.getByRole('dialog', { name: /Open chat with Recipient 14/ });
-  await expect(dialog).toContainText('Fresh text fetched at click time');
-  const openLink = dialog.getByRole('link', { name: 'Open WhatsApp' });
-  const url = await openLink.getAttribute('href');
-  await openLink.evaluate((element) => element.addEventListener('click', (event) => event.preventDefault()));
-  await openLink.click();
+  const url = new URL(await page.evaluate(() => localStorage.getItem('captured-open-url')!));
   expect(await page.evaluate(() => localStorage.getItem('captured-clipboard'))).toBe(expected);
-  expect(new URL(url!).hostname).toBe('wa.me');
-  expect(new URL(url!).searchParams.get('text')).toBe(expected);
+  expect(url.hostname).toBe('wa.me');
+  expect(url.searchParams.get('text')).toBe(expected);
   await expect(queue.getByText(/opened the latest message.*old draft/i)).toBeVisible();
 });
 
@@ -160,9 +164,9 @@ test('converts pasted double stars to WhatsApp single-star bold immediately', as
   await page.getByRole('button', { name: /Send Queue/ }).click();
   const queue = page.getByRole('region', { name: 'Send queue', exact: true });
   await queue.getByLabel('Search queue').fill('Bold formatting test');
-  await queue.getByRole('button', { name: 'Review & open WhatsApp' }).click();
-  const link = page.getByRole('dialog').getByRole('link', { name: 'Open WhatsApp' });
-  const url = new URL((await link.getAttribute('href'))!);
+  await captureOpenUrl(page);
+  await queue.getByRole('button', { name: 'Open WhatsApp' }).click();
+  const url = new URL(await page.evaluate(() => localStorage.getItem('captured-open-url')!));
   expect(url.searchParams.get('text')).toBe('Hello *Priya*, this is *important*.');
 });
 
